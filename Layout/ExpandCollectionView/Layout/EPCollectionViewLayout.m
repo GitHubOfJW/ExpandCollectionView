@@ -82,7 +82,10 @@
     // 判断有没有实现
     if (isNotNullDelegate&&[self.delegate respondsToSelector:@selector(collectionViewHeaderView)]) {
         UIView* headerView = [self.delegate collectionViewHeaderView];//获取头部View
-        if ((headerView&&![headerView isEqual:self.headerView])||(self.headerView==nil&&headerView)){
+        if (!headerView) {
+           if(self.headerView)[self.headerView removeFromSuperview];
+            self.headerView = headerView;
+        }else if ((headerView&&![headerView isEqual:self.headerView])||(self.headerView==nil&&headerView)){
             [self.headerView removeFromSuperview];//清楚之前的header
             self.headerView = headerView;
             CGRect headerRect = self.headerView.frame;
@@ -92,6 +95,9 @@
             self.headerView.frame = headerRect;
             self.preRect = headerRect;
             [self.collectionView addSubview:self.headerView];
+        }else if (headerView)
+        {
+             self.preRect = self.headerView.frame;
         }
     }
     
@@ -133,44 +139,80 @@
         }
         [self.m_itemSizes addObject:[NSValue valueWithCGSize:itemSize]];
         
-
-        
         //sectionHeader
         if (isImpHeaderheightMethod) {
-            UICollectionViewLayoutAttributes * headAttr = [self layoutAttributesForSupplementaryViewOfKind:UICollectionElementKindSectionHeader atIndexPath:[NSIndexPath indexPathForItem:0 inSection:section]];
-            [self.m_attrs addObject:headAttr];
+           CGFloat header = [self.delegate collectionView:self.collectionView heightForHeaderInSection:section];
+            if (header) {
+                UICollectionViewLayoutAttributes * headAttr = [self layoutAttributesForSupplementaryViewOfKind:UICollectionElementKindSectionHeader atIndexPath:[NSIndexPath indexPathForItem:0 inSection:section]];
+                
+                [self.m_attrs addObject:headAttr];
+              
+            }
         }
-        
+         
         
         //item   每个选项的
         NSInteger itemCount =  [self.collectionView numberOfItemsInSection:section];
+      
+//        加头部 inset
+        if (itemCount) {
+            CGRect tempRect = self.preRect;
+            tempRect.origin.y+=sectionInset.top;
+            tempRect.origin.x = 0;
+            tempRect.size.width = 0;
+            self.preRect = tempRect;
+        }
+        
+        
         for (NSUInteger itemIndex=0; itemIndex<itemCount; itemIndex++) {
             UICollectionViewLayoutAttributes *itemAttr = [self layoutAttributesForItemAtIndexPath:[NSIndexPath indexPathForItem:itemIndex inSection:section]];
             [self.m_attrs addObject:itemAttr];
         }
+       
         
+        //加头部 inset
+        if (itemCount) {
+            CGRect tempRect = self.preRect;
+            tempRect.origin.y+=sectionInset.bottom;
+            tempRect.origin.x = 0;
+            tempRect.size.width = 0;
+            self.preRect = tempRect;
+        }
         
         //sectionFooter
         if (isImpFooterheightMethod) {
-            UICollectionViewLayoutAttributes * footerAttr = [self layoutAttributesForSupplementaryViewOfKind:UICollectionElementKindSectionFooter atIndexPath:[NSIndexPath indexPathForItem:0 inSection:section]];
-            [self.m_attrs addObject:footerAttr];
+              CGFloat footer = [self.delegate collectionView:self.collectionView heightForFooterInSection:section];
+            if (footer) {
+                UICollectionViewLayoutAttributes * footerAttr = [self layoutAttributesForSupplementaryViewOfKind:UICollectionElementKindSectionFooter atIndexPath:[NSIndexPath indexPathForItem:0 inSection:section]];
+                [self.m_attrs addObject:footerAttr];
+            }
         }
-
     }
     
     // 判断有没有实现
     if (isNotNullDelegate&&[self.delegate respondsToSelector:@selector(collectionViewFooterView)]) {
         UIView* footerView  = [self.delegate collectionViewFooterView];//获取头部View
-        if ((footerView&&![footerView isEqual:self.footerView])||(self.footerView==nil&&footerView)){
+        if (!footerView) {
+            if(self.footerView)[self.footerView removeFromSuperview];
+            self.footerView = footerView;
+        }else if ((footerView&&![footerView isEqual:self.footerView])||(self.footerView==nil&&footerView)){
             [self.footerView removeFromSuperview];//清楚之前的header
             self.footerView = footerView;
             CGRect footerRect = self.footerView.frame;
             footerRect.origin.x = 0;
-            footerRect.origin.y = CGRectGetMaxY(self.preRect);;
+            footerRect.origin.y = CGRectGetMaxY(self.preRect);
             footerRect.size.width = self.collectionView.bounds.size.width;
             self.footerView.frame = footerRect;
             self.preRect = footerRect;
             [self.collectionView addSubview:self.footerView];
+        }else if(self.footerView)
+        {
+            CGRect footerRect = self.footerView.frame;
+            footerRect.origin.x = 0;
+            footerRect.origin.y = CGRectGetMaxY(self.preRect);
+            footerRect.size.width = self.collectionView.bounds.size.width;
+            self.footerView.frame = footerRect;
+            self.preRect = footerRect;
         }
     }
 
@@ -198,7 +240,12 @@
  */
 -(CGSize)collectionViewContentSize
 {
-    return  CGSizeMake(self.collectionView.bounds.size.width, CGRectGetMaxY(self.preRect));//
+    CGFloat height =CGRectGetMaxY(self.preRect);
+    if (height<self.collectionView.bounds.size.height) {
+        height  = self.collectionView.bounds.size.height;
+//        height -= 20;
+    }
+    return  CGSizeMake(self.collectionView.bounds.size.width,height);//
 }
 
 /**
@@ -209,33 +256,26 @@
     UICollectionViewLayoutAttributes *attr = [UICollectionViewLayoutAttributes layoutAttributesForSupplementaryViewOfKind:elementKind withIndexPath:indexPath];
     
     
-    UIEdgeInsets sectionInset =  [[self.m_sectionInsets objectAtIndex:indexPath.section] UIEdgeInsetsValue];
-    
-    
-    
     CGFloat attrX = 0;
     CGFloat attrY = CGRectGetMaxY(self.preRect);
     
     CGFloat height =  0;
     
-    CGFloat addValue = 0;
     if ([elementKind isEqualToString:UICollectionElementKindSectionHeader]) {
         if (self.delegate&&[self.delegate respondsToSelector:@selector(collectionView:heightForHeaderInSection:)]) {
             height =  [self.delegate collectionView:self.collectionView heightForHeaderInSection:indexPath.section];
         }
-        addValue =  sectionInset.top;
     }else{
         if (self.delegate&&[self.delegate respondsToSelector:@selector(collectionView:heightForFooterInSection:)]) {
             height =  [self.delegate collectionView:self.collectionView heightForFooterInSection:indexPath.section];
-        } 
-        attrY+=sectionInset.bottom;
+        }
     }
     
 
     CGFloat attrW = self.collectionView.bounds.size.width;
     CGFloat attrH = height;
     
-    self.preRect= CGRectMake(0,attrY+height+addValue,0,0);
+    self.preRect= CGRectMake(0,attrY,0,height);
     
     attr.frame = CGRectMake(attrX, attrY, attrW, attrH);
     
@@ -248,7 +288,6 @@
  */
 -(UICollectionViewLayoutAttributes*)layoutAttributesForItemAtIndexPath:(NSIndexPath *)indexPath
 {
-    
     
     UICollectionViewLayoutAttributes *attr = [UICollectionViewLayoutAttributes layoutAttributesForCellWithIndexPath:indexPath];
  
@@ -264,6 +303,7 @@
     CGFloat attrW = itemSize.width;
     if (attrX == space.width) {//每一行的第一个
         attrX = sectionInset.left;
+        attrY = CGRectGetMaxY(self.preRect);
     }else if (attrX+attrW>self.collectionView.bounds.size.width-sectionInset.right) {//如果超出了最右边 x 变为最左侧 y 下移动
         attrX = sectionInset.left;
         attrY = CGRectGetMaxY(self.preRect)+space.height;
